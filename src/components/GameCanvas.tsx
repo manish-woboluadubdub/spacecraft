@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, View, Dimensions, GestureResponderEvent } from 'react-native';
+import { StyleSheet, View, Dimensions, Platform } from 'react-native';
 import { playSFX, triggerHaptic } from '@/utils/sound';
 
 interface GameCanvasProps {
@@ -96,13 +96,39 @@ export default function GameCanvas({
   };
 
   // Drag controls
-  const handleTouch = (event: GestureResponderEvent) => {
+  const handleTouch = (event: any) => {
     if (!gameActiveRef.current) return;
-    const touchX = event.nativeEvent.locationX;
+    
+    let touchX = 0;
+    if (Platform.OS === 'web' && event.currentTarget && event.currentTarget.getBoundingClientRect) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const clientX = event.clientX ?? (event.touches && event.touches[0] ? event.touches[0].clientX : rect.left + containerWidth / 2);
+      touchX = clientX - rect.left;
+    } else {
+      touchX = event.nativeEvent.locationX;
+    }
+
     const percentage = (touchX / containerWidth) * 100;
     const clampedX = Math.max(8, Math.min(92, percentage));
     playerXRef.current = clampedX;
     setPlayerX(clampedX);
+  };
+
+  const isMouseDownRef = useRef(false);
+
+  const handleMouseDown = (event: any) => {
+    isMouseDownRef.current = true;
+    handleTouch(event);
+  };
+
+  const handleMouseMove = (event: any) => {
+    if (isMouseDownRef.current) {
+      handleTouch(event);
+    }
+  };
+
+  const handleMouseUp = () => {
+    isMouseDownRef.current = false;
   };
 
   function handlePlayerHit() {
@@ -116,19 +142,13 @@ export default function GameCanvas({
       return;
     }
 
-    // Deduct life
-    livesRef.current -= 1;
-    onLivesUpdate(livesRef.current);
+    // Hull hit: GO BOOM immediately!
+    livesRef.current = 0;
+    onLivesUpdate(0);
+    gameActiveRef.current = false;
+    playSFX('explosion'); // Massive explosion sound
     triggerHaptic('heavy');
-
-    if (livesRef.current <= 0) {
-      // Game Over
-      gameActiveRef.current = false;
-      playSFX('gameover');
-      onGameOverTrigger(scoreRef.current);
-    } else {
-      playSFX('explosion');
-    }
+    onGameOverTrigger(scoreRef.current);
   }
 
   function activatePowerUp(type: 'shield' | 'blaster') {
@@ -211,32 +231,37 @@ export default function GameCanvas({
       setPowerUps([...powerUpsRef.current]);
     }, SPAWN_INTERVALS.POWERUP);
 
-    // Auto laser fire when blaster is active
-    let blasterInterval: NodeJS.Timeout;
-    const checkBlasterFire = () => {
-      blasterInterval = setInterval(() => {
-        if (!gameActiveRef.current) return;
-        if (blasterActiveRef.current) {
-          playSFX('laser');
-          triggerHaptic('light');
-          const newLaser: Laser = {
-            id: ++idCounter,
-            x: playerXRef.current,
-            y: 85, // Spawn right above ship
-          };
-          
-          lasersRef.current.push(newLaser);
-          setLasers([...lasersRef.current]);
-        }
-      }, 350);
-    };
-    checkBlasterFire();
+    // Continuous auto-firing laser engine
+    let fireCounter = 0;
+    const laserInterval = setInterval(() => {
+      if (!gameActiveRef.current) return;
+      
+      // Starting 100m, laser shooter will not start. Only active after 100m!
+      if (scoreRef.current < 100) return;
+      
+      fireCounter += 50;
+      const fireRate = blasterActiveRef.current ? 250 : 600; // 250ms when blaster active, 600ms normally
+      
+      if (fireCounter >= fireRate) {
+        fireCounter = 0;
+        playSFX('laser');
+        triggerHaptic('light');
+        const newLaser: Laser = {
+          id: ++idCounter,
+          x: playerXRef.current,
+          y: 85, // Spawn right above ship
+        };
+        
+        lasersRef.current.push(newLaser);
+        setLasers([...lasersRef.current]);
+      }
+    }, 50);
 
     return () => {
       clearInterval(asteroidInterval);
       clearInterval(dustInterval);
       clearInterval(powerupInterval);
-      clearInterval(blasterInterval);
+      clearInterval(laserInterval);
     };
   }, [isPaused, isGameOver]);
 
@@ -385,6 +410,10 @@ export default function GameCanvas({
       onLayout={onLayout}
       onTouchStart={handleTouch}
       onTouchMove={handleTouch}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={handleMouseUp}
     >
       {/* 1. Dust Particles */}
       {dusts.map((dust) => (

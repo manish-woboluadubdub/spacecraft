@@ -14,9 +14,11 @@ export default function PlayScreen() {
 
   // Game metrics
   const [score, setScore] = useState(0);
-  const [lives, setLives] = useState(3);
   const [shieldActive, setShieldActive] = useState(false);
   const [blasterActive, setBlasterActive] = useState(false);
+
+  // States
+  const [gameKey, setGameKey] = useState(0);
 
   // States
   const [countdown, setCountdown] = useState(3);
@@ -43,7 +45,7 @@ export default function PlayScreen() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [gameKey]);
 
   // 2. Handle Game Over Save Score logic
   const handleGameOver = async (finalScore: number) => {
@@ -66,7 +68,6 @@ export default function PlayScreen() {
   const handleRestart = () => {
     playSFX('laser');
     setScore(0);
-    setLives(3);
     setShieldActive(false);
     setBlasterActive(false);
     setIsGameOver(false);
@@ -74,6 +75,7 @@ export default function PlayScreen() {
     setIsPaused(false);
     setCountdown(3);
     setIsPlaying(false);
+    setGameKey((k) => k + 1);
   };
 
   const handleExit = () => {
@@ -97,26 +99,18 @@ export default function PlayScreen() {
       {isPlaying && (
         <SafeAreaView style={styles.hudContainer}>
           <View style={styles.hudHeader}>
-            {/* Lives Indicators */}
+            {/* Status Indicator */}
             <View style={styles.hudItem}>
-              <ThemedText type="code" themeColor="textSecondary">LIVES</ThemedText>
-              <View style={styles.livesRow}>
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <View
-                    key={i}
-                    style={[
-                      styles.lifeDot,
-                      i < lives ? styles.lifeDotActive : styles.lifeDotDead,
-                    ]}
-                  />
-                ))}
-              </View>
+              <ThemedText type="code" themeColor="textSecondary">STATUS</ThemedText>
+              <ThemedText style={[styles.statusText, shieldActive ? styles.statusShielded : styles.statusVulnerable]}>
+                {shieldActive ? 'SHIELDED' : 'CRITICAL'}
+              </ThemedText>
             </View>
 
             {/* Score */}
             <View style={[styles.hudItem, styles.hudCenter]}>
-              <ThemedText type="code" themeColor="textSecondary">SCORE</ThemedText>
-              <ThemedText style={styles.hudScoreText}>{score}</ThemedText>
+              <ThemedText type="code" themeColor="textSecondary">DISTANCE</ThemedText>
+              <ThemedText style={styles.hudScoreText}>{score}m</ThemedText>
             </View>
 
             {/* Pause Control */}
@@ -130,8 +124,17 @@ export default function PlayScreen() {
             </Pressable>
           </View>
 
-          {/* Active Power-up Badges */}
+          {/* Active Power-up & Weapon Status Badges */}
           <View style={styles.powerupBadgesContainer}>
+            {score < 100 ? (
+              <View style={[styles.badge, styles.stealthBadge]}>
+                <ThemedText style={styles.badgeText}>STEALTH ACTIVE (AUTO-LASERS AT 100m)</ThemedText>
+              </View>
+            ) : (
+              <View style={[styles.badge, styles.weaponsOnlineBadge]}>
+                <ThemedText style={styles.badgeText}>AUTO-LASERS ONLINE</ThemedText>
+              </View>
+            )}
             {shieldActive && (
               <View style={[styles.badge, styles.shieldBadge]}>
                 <ThemedText style={styles.badgeText}>SHIELD ACTIVE</ThemedText>
@@ -152,7 +155,7 @@ export default function PlayScreen() {
           isPaused={isPaused}
           isGameOver={isGameOver}
           onScoreUpdate={setScore}
-          onLivesUpdate={setLives}
+          onLivesUpdate={() => {}}
           onShieldUpdate={setShieldActive}
           onBlasterUpdate={setBlasterActive}
           onGameOverTrigger={handleGameOver}
@@ -294,6 +297,18 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     marginTop: Spacing.half,
   },
+  statusText: {
+    fontSize: 14,
+    fontWeight: '800',
+    fontFamily: 'monospace',
+    marginTop: Spacing.half,
+  },
+  statusShielded: {
+    color: '#00d2ff', // Cyan
+  },
+  statusVulnerable: {
+    color: '#ff007f', // Cyberpunk neon pink/red
+  },
   pauseButton: {
     paddingVertical: Spacing.one,
     paddingHorizontal: Spacing.three,
@@ -333,6 +348,14 @@ const styles = StyleSheet.create({
   blasterBadge: {
     borderColor: '#a020f0',
     backgroundColor: 'rgba(160, 32, 240, 0.1)',
+  },
+  stealthBadge: {
+    borderColor: '#ff4b4b',
+    backgroundColor: 'rgba(255, 75, 75, 0.15)',
+  },
+  weaponsOnlineBadge: {
+    borderColor: '#00ff7f',
+    backgroundColor: 'rgba(0, 255, 127, 0.15)',
   },
   badgeText: {
     fontSize: 10,
