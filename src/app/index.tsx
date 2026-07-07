@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, View, Pressable, Dimensions } from 'react-native';
+import { StyleSheet, View, Pressable, Dimensions, Platform } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
@@ -69,15 +69,19 @@ export default function HomeScreen() {
     }, [])
   );
 
-  const handleStartGame = async () => {
-    await playSFX('laser');
-    router.push('/play');
+  const handleStartGame = () => {
+    playSFX('laser');
+    if (Platform.OS === 'web') {
+      window.location.href = '/play';
+    } else {
+      router.push('/play');
+    }
   };
 
   return (
     <ThemedView style={styles.container}>
       {/* Background Starfield */}
-      <View style={StyleSheet.absoluteFill}>
+      <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]} pointerEvents="none">
         {stars.map((star, index) => (
           <View
             key={index}
@@ -277,6 +281,11 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.4,
     shadowRadius: 10,
     elevation: 6,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
   },
   playButtonPressed: {
     backgroundColor: '#d6006b',

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, View, Pressable, Modal } from 'react-native';
+import { StyleSheet, View, Pressable, Modal, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
@@ -63,8 +63,8 @@ export default function PlayScreen() {
     }
   };
 
-  const handleRestart = async () => {
-    await playSFX('laser');
+  const handleRestart = () => {
+    playSFX('laser');
     setScore(0);
     setLives(3);
     setShieldActive(false);
@@ -76,10 +76,14 @@ export default function PlayScreen() {
     setIsPlaying(false);
   };
 
-  const handleExit = async () => {
-    await playSFX('laser');
+  const handleExit = () => {
+    playSFX('laser');
     stopBGM();
-    router.replace('/');
+    if (Platform.OS === 'web') {
+      window.location.href = '/';
+    } else {
+      router.replace('/');
+    }
   };
 
   const togglePause = () => {
@@ -296,6 +300,11 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.3)',
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
   },
   pauseButtonText: {
     color: '#ffffff',
@@ -404,6 +413,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginVertical: Spacing.one,
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
   },
   modalBtnPrimary: {
     backgroundColor: '#ff007f',

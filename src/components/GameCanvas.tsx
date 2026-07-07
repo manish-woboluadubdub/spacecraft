@@ -66,6 +66,12 @@ export default function GameCanvas({
   const shieldActiveRef = useRef<boolean>(false);
   const blasterActiveRef = useRef<boolean>(false);
 
+  // Entity refs to perform pure calculations inside requestAnimationFrame
+  const asteroidsRef = useRef<Asteroid[]>([]);
+  const dustsRef = useRef<Dust[]>([]);
+  const lasersRef = useRef<Laser[]>([]);
+  const powerUpsRef = useRef<PowerUp[]>([]);
+
   const [playerX, setPlayerX] = useState(50);
   const [asteroids, setAsteroids] = useState<Asteroid[]>([]);
   const [dusts, setDusts] = useState<Dust[]>([]);
@@ -169,7 +175,9 @@ export default function GameCanvas({
         size: 30 + Math.random() * 30, // in pixels
         speed: baseSpeed * speedScale,
       };
-      setAsteroids((prev) => [...prev, newAsteroid]);
+      
+      asteroidsRef.current.push(newAsteroid);
+      setAsteroids([...asteroidsRef.current]);
     }, SPAWN_INTERVALS.ASTEROID);
 
     const dustInterval = setInterval(() => {
@@ -181,7 +189,9 @@ export default function GameCanvas({
         size: 6 + Math.random() * 6,
         speed: 0.8 + Math.random() * 0.5,
       };
-      setDusts((prev) => [...prev, newDust]);
+      
+      dustsRef.current.push(newDust);
+      setDusts([...dustsRef.current]);
     }, SPAWN_INTERVALS.DUST);
 
     const powerupInterval = setInterval(() => {
@@ -196,7 +206,9 @@ export default function GameCanvas({
         type,
         speed: 0.6,
       };
-      setPowerUps((prev) => [...prev, newPowerUp]);
+      
+      powerUpsRef.current.push(newPowerUp);
+      setPowerUps([...powerUpsRef.current]);
     }, SPAWN_INTERVALS.POWERUP);
 
     // Auto laser fire when blaster is active
@@ -212,7 +224,9 @@ export default function GameCanvas({
             x: playerXRef.current,
             y: 85, // Spawn right above ship
           };
-          setLasers((prev) => [...prev, newLaser]);
+          
+          lasersRef.current.push(newLaser);
+          setLasers([...lasersRef.current]);
         }
       }, 350);
     };
@@ -234,128 +248,123 @@ export default function GameCanvas({
         return;
       }
 
-      // 1. Move Asteroids & Check Player Collisions
-      setAsteroids((prev) => {
-        const next: Asteroid[] = [];
-        for (const item of prev) {
-          const nextY = item.y + item.speed;
-          
-          // Collision check: player is at y = 88-92% roughly
-          // ship horizontal range is playerX +/- wing width
-          const shipY = 88; // ship vertical center percentage
-          const shipHalfWidthPct = 8; // wings width percentage
-          
-          const yDist = Math.abs(nextY - shipY);
-          const xDist = Math.abs(item.x - playerXRef.current);
-          
-          if (yDist < 6 && xDist < shipHalfWidthPct) {
-            // Hit spaceship!
-            handlePlayerHit();
-            // Destroy asteroid
-            continue;
-          }
+      // 1. Move Lasers & Check Collision with Asteroids
+      const nextLasers: Laser[] = [];
+      const remainingAsteroids: Asteroid[] = [...asteroidsRef.current];
 
-          if (nextY > 105) {
-            // Dodged! Score points
-            scoreRef.current += 10;
-            onScoreUpdate(scoreRef.current);
-          } else {
-            next.push({ ...item, y: nextY });
-          }
-        }
-        return next;
-      });
+      for (const laser of lasersRef.current) {
+        const nextY = laser.y - 2; // Lasers move up fast
+        let hitIndex = -1;
 
-      // 2. Move Dust & Check Collections
-      setDusts((prev) => {
-        const next: Dust[] = [];
-        for (const item of prev) {
-          const nextY = item.y + item.speed;
+        // Check if this laser hits any asteroid
+        for (let i = 0; i < remainingAsteroids.length; i++) {
+          const ast = remainingAsteroids[i];
+          const xDist = Math.abs(ast.x - laser.x);
+          const yDist = Math.abs(ast.y - nextY);
 
-          const shipY = 88;
-          const shipHalfWidthPct = 8;
-
-          const yDist = Math.abs(nextY - shipY);
-          const xDist = Math.abs(item.x - playerXRef.current);
-
-          if (yDist < 5 && xDist < shipHalfWidthPct) {
-            // Collected!
-            scoreRef.current += 50;
-            onScoreUpdate(scoreRef.current);
-            playSFX('powerup');
-            triggerHaptic('light');
-            continue;
-          }
-
-          if (nextY <= 105) {
-            next.push({ ...item, y: nextY });
-          }
-        }
-        return next;
-      });
-
-      // 3. Move Power-Ups & Check Collections
-      setPowerUps((prev) => {
-        const next: PowerUp[] = [];
-        for (const item of prev) {
-          const nextY = item.y + item.speed;
-
-          const shipY = 88;
-          const shipHalfWidthPct = 8;
-
-          const yDist = Math.abs(nextY - shipY);
-          const xDist = Math.abs(item.x - playerXRef.current);
-
-          if (yDist < 6 && xDist < shipHalfWidthPct) {
-            // Power-up collected!
-            activatePowerUp(item.type);
-            continue;
-          }
-
-          if (nextY <= 105) {
-            next.push({ ...item, y: nextY });
-          }
-        }
-        return next;
-      });
-
-      // 4. Move Lasers & Check Collision with Asteroids
-      setLasers((prev) => {
-        const nextLasers: Laser[] = [];
-        
-        for (const laser of prev) {
-          const nextY = laser.y - 2; // Lasers move up fast
-          let laserHit = false;
-
-          // Check if laser hits any asteroid
-          setAsteroids((prevAsteroids) => {
-            const nextAsteroids: Asteroid[] = [];
-            for (const ast of prevAsteroids) {
-              const xDist = Math.abs(ast.x - laser.x);
-              const yDist = Math.abs(ast.y - nextY);
-
-              // 5% x-dist and 6% y-dist threshold
-              if (xDist < 6 && yDist < 6) {
-                laserHit = true;
-                scoreRef.current += 30; // Bonus score for blasting
-                onScoreUpdate(scoreRef.current);
-                playSFX('explosion');
-                triggerHaptic('medium');
-                // Don't keep asteroid
-                continue;
-              }
-              nextAsteroids.push(ast);
-            }
-            return nextAsteroids;
-          });
-
-          if (!laserHit && nextY > -5) {
-            nextLasers.push({ ...laser, y: nextY });
+          if (xDist < 6 && yDist < 6) {
+            hitIndex = i;
+            break;
           }
         }
 
-        return nextLasers;
-      });
+        if (hitIndex > -1) {
+          // Laser hit!
+          remainingAsteroids.splice(hitIndex, 1);
+          scoreRef.current += 30; // Score bonus
+          onScoreUpdate(scoreRef.current);
+          playSFX('explosion');
+          triggerHaptic('medium');
+          // Laser is destroyed
+        } else if (nextY > -5) {
+          nextLasers.push({ ...laser, y: nextY });
+        }
+      }
+
+      // 2. Move Remaining Asteroids & Check Player Collisions
+      const finalAsteroids: Asteroid[] = [];
+      for (const ast of remainingAsteroids) {
+        const nextY = ast.y + ast.speed;
+
+        const shipY = 88;
+        const shipHalfWidthPct = 8;
+
+        const yDist = Math.abs(nextY - shipY);
+        const xDist = Math.abs(ast.x - playerXRef.current);
+
+        if (yDist < 6 && xDist < shipHalfWidthPct) {
+          // Collision with player!
+          handlePlayerHit();
+          continue;
+        }
+
+        if (nextY > 105) {
+          // Dodged!
+          scoreRef.current += 10;
+          onScoreUpdate(scoreRef.current);
+        } else {
+          finalAsteroids.push({ ...ast, y: nextY });
+        }
+      }
+
+      // 3. Move Dust & Check Collections
+      const remainingDusts: Dust[] = [];
+      for (const dust of dustsRef.current) {
+        const nextY = dust.y + dust.speed;
+
+        const shipY = 88;
+        const shipHalfWidthPct = 8;
+
+        const yDist = Math.abs(nextY - shipY);
+        const xDist = Math.abs(dust.x - playerXRef.current);
+
+        if (yDist < 5 && xDist < shipHalfWidthPct) {
+          // Collected dust!
+          scoreRef.current += 50;
+          onScoreUpdate(scoreRef.current);
+          playSFX('powerup');
+          triggerHaptic('light');
+          continue;
+        }
+
+        if (nextY <= 105) {
+          remainingDusts.push({ ...dust, y: nextY });
+        }
+      }
+
+      // 4. Move Power-Ups & Check Collections
+      const remainingPowerUps: PowerUp[] = [];
+      for (const p of powerUpsRef.current) {
+        const nextY = p.y + p.speed;
+
+        const shipY = 88;
+        const shipHalfWidthPct = 8;
+
+        const yDist = Math.abs(nextY - shipY);
+        const xDist = Math.abs(p.x - playerXRef.current);
+
+        if (yDist < 6 && xDist < shipHalfWidthPct) {
+          // Collected power-up!
+          activatePowerUp(p.type);
+          continue;
+        }
+
+        if (nextY <= 105) {
+          remainingPowerUps.push({ ...p, y: nextY });
+        }
+      }
+
+      // Update refs
+      asteroidsRef.current = finalAsteroids;
+      lasersRef.current = nextLasers;
+      dustsRef.current = remainingDusts;
+      powerUpsRef.current = remainingPowerUps;
+
+      // Update states
+      setAsteroids(finalAsteroids);
+      setLasers(nextLasers);
+      setDusts(remainingDusts);
+      setPowerUps(remainingPowerUps);
 
       loopRef.current = requestAnimationFrame(updatePhysics);
     };

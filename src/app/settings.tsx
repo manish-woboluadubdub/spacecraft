@@ -228,6 +228,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: 'transparent',
+    ...Platform.select({
+      web: {
+        cursor: 'pointer',
+      },
+    }),
   },
   resetButtonPressed: {
     backgroundColor: 'rgba(255, 0, 127, 0.1)',
